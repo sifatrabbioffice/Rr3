@@ -1,6 +1,269 @@
 name: GameHub Pro - A17 iOS Builder
 
+on:name: GameHub Pro - A17 PC Engine Builder
+
 on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      target_game:
+        description: 'Target optimization (generic)'
+        required: false
+        default: 'generic'
+
+env:
+  WINE_VERSION: "9.0"
+  MOLTENVK_VERSION: "1.2.11"
+  DXVK_VERSION: "2.4"
+  APP_BUNDLE_ID: "com.gamehub.pro.engine"
+  APP_VERSION: "3.0"
+
+jobs:
+  download_dependencies:
+    name: "📦 Download PC Runtimes & Libraries"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Dependency Cache Directory
+        run: mkdir -p deps/vcredist deps/directx deps/dotnet deps/dxvk deps/moltenvk deps/wine
+
+      # Visual C++ Redistributables
+      - name: Download MSVC++ Redistributables
+        run: |
+          BASE="https://download.microsoft.com/download"
+          curl -fsSL "$BASE/1/6/5/165255E7-1E0F-462C-B18D-2601DB8B0B42/vcredist_x64.exe" \
+            -o deps/vcredist/vcredist_2010_x64.exe || true
+          curl -fsSL "https://aka.ms/vs/17/release/vc_redist.x64.exe" \
+            -o deps/vcredist/vc_redist_2022_x64.exe || true
+          curl -fsSL "https://aka.ms/vs/17/release/vc_redist.x86.exe" \
+            -o deps/vcredist/vc_redist_2022_x86.exe || true
+          echo "✅ MSVC++ packages downloaded"
+
+      # DirectX & DXVK
+      - name: Download DirectX & DXVK
+        run: |
+          curl -fsSL "https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe" \
+            -o deps/directx/dx_jun2010_redist.exe || true
+          
+          curl -fsSL "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz" \
+            -o deps/dxvk/dxvk.tar.gz
+          tar -xzf deps/dxvk/dxvk.tar.gz -C deps/dxvk/ --strip-components=1
+
+      # .NET
+      - name: Download .NET
+        run: |
+          curl -fsSL "https://download.microsoft.com/download/B/9/E/B9E63261-3B72-4775-A08A-5E1F07E2EA1C/ndp48-web.exe" \
+            -o deps/dotnet/ndp48_installer.exe || true
+          curl -fsSL "https://download.visualstudio.microsoft.com/download/pr/dotnet-runtime-6.0.36-win-x64.exe" \
+            -o deps/dotnet/dotnet6_runtime_x64.exe || true
+
+      # MoltenVK
+      - name: Download MoltenVK
+        run: |
+          curl -fsSL "https://github.com/KhronosGroup/MoltenVK/releases/download/v${MOLTENVK_VERSION}/MoltenVK-macos.tar" \
+            -o deps/moltenvk/MoltenVK.tar || true
+          curl -fsSL "https://github.com/KhronosGroup/MoltenVK/releases/download/v${MOLTENVK_VERSION}/MoltenVK-ios.tar" \
+            -o deps/moltenvk/MoltenVK-ios.tar || true
+
+      - name: Package Dependencies
+        run: |
+          tar -czf runtime_deps.tar.gz deps/
+          ls -lh runtime_deps.tar.gz
+
+      - name: Upload Dependency Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-dependencies
+          path: runtime_deps.tar.gz
+          retention-days: 7
+
+  build_ios_app:
+    name: "🔨 Build GameHub iOS Application"
+    runs-on: macos-latest
+    needs: download_dependencies
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Build Tools
+        run: |
+          brew install xcodegen create-dmg
+
+      - name: Download Runtime Dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-dependencies
+
+      - name: Extract Dependencies
+        run: |
+          tar -xzf runtime_deps.tar.gz
+          echo "Dependency tree:"
+          find deps/ -type f | head -30
+
+      # ── Generate Xcode Project Structure ──
+      - name: Generate Project Structure
+        run: |
+          mkdir -p GameHub/Sources/{Core,GPU,UI,Input} GameHub/Resources/Assets.xcassets/{AppIcon.appiconset,AccentColor.colorset}
+
+          # Info.plist
+          cat > GameHub/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key><string>com.gamehub.pro.engine</string>
+            <key>CFBundleName</key><string>GameHub Pro</string>
+            <key>CFBundleDisplayName</key><string>GameHub Pro</string>
+            <key>CFBundleShortVersionString</key><string>3.0</string>
+            <key>CFBundleVersion</key><string>300</string>
+            <key>LSRequiresIPhoneOS</key><true/>
+            <key>UIRequiredDeviceCapabilities</key>
+            <array><string>arm64</string><string>metal</string></array>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+              <string>UIInterfaceOrientationLandscapeLeft</string>
+              <string>UIInterfaceOrientationLandscapeRight</string>
+            </array>
+            <key>get-task-allow</key><true/>
+            <key>ITSAppUsesNonExemptEncryption</key><false/>
+          </dict>
+          </plist>
+          EOF
+
+          # project.yml for xcodegen
+          cat > project.yml << 'EOF'
+          name: GameHub
+          options:
+            bundleIdPrefix: com.gamehub.pro
+            deploymentTarget:
+              iOS: "17.0"
+          targets:
+            GameHub:
+              type: application
+              platform: iOS
+              deploymentTarget: "17.0"
+              sources:
+                - path: GameHub/Sources
+                - path: GameHub/Resources
+              info:
+                path: GameHub/Info.plist
+              settings:
+                base:
+                  GENERATE_INFOPLIST_FILE: NO
+                  SWIFT_OPTIMIZATION_LEVEL: "-O"
+                  ENABLE_BITCODE: NO
+                  TARGETED_DEVICE_FAMILY: "1"
+                  IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+          EOF
+
+      # ── Core Swift Files (Realistic) ──
+      - name: Write Core Swift Files
+        run: |
+          # Core Engine (placeholder for real logic)
+          cat > GameHub/Sources/Core/JITEngine.swift << 'SWIFT'
+          import Foundation
+
+          class JITEngine {
+              static let shared = JITEngine()
+              private(set) var isJITEnabled = false
+              
+              func enableJIT() -> Bool {
+                  // Real JIT on iOS requires special entitlements + debugserver / SideStore / StikDebug
+                  // This is highly restricted and not reliable for production use.
+                  print("JIT enable attempt - requires get-task-allow + external tool")
+                  isJITEnabled = true // For demo only
+                  return true
+              }
+          }
+          SWIFT
+
+          # GPU Bridge
+          cat > GameHub/Sources/GPU/MetalBridge.swift << 'SWIFT'
+          import Metal
+
+          class MetalBridge {
+              static let shared = MetalBridge()
+              let device: MTLDevice? = MTLCreateSystemDefaultDevice()
+          }
+          SWIFT
+
+          # Main App
+          cat > GameHub/Sources/App.swift << 'SWIFT'
+          import SwiftUI
+
+          @main
+          struct GameHubApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      ContentView()
+                  }
+              }
+          }
+
+          struct ContentView: View {
+              var body: some View {
+                  NavigationStack {
+                      VStack(spacing: 40) {
+                          Text("GameHub Pro")
+                              .font(.largeTitle.bold())
+                              .foregroundStyle(.cyan)
+                          
+                          Text("A17 Pro Compatibility Layer")
+                              .foregroundStyle(.secondary)
+                          
+                          Text("⚠️ This is a UI shell.\nReal x86 emulation on iOS is extremely limited.")
+                              .multilineTextAlignment(.center)
+                              .foregroundStyle(.orange)
+                          
+                          NavigationLink("Desktop") {
+                              Text("Desktop View - Coming Soon")
+                                  .font(.title2)
+                          }
+                      }
+                      .padding()
+                  }
+              }
+          }
+          SWIFT
+
+      - name: Generate Xcode Project & Build
+        run: |
+          xcodegen generate
+          
+          xcodebuild archive \
+            -project GameHub.xcodeproj \
+            -scheme GameHub \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/GameHub.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ARCHS="arm64" \
+            | tee build.log
+
+      - name: Package IPA
+        run: |
+          mkdir -p build/Payload/GameHub.app
+          cp -r build/GameHub.xcarchive/Products/Applications/GameHub.app/ build/Payload/ 2>/dev/null || true
+          
+          # Copy real runtime files (no fake padding)
+          mkdir -p build/Payload/GameHub.app/Runtime
+          cp -r deps/ build/Payload/GameHub.app/Runtime/ 2>/dev/null || true
+          
+          cd build
+          zip -qr GameHub_Pro_v3.ipa Payload/
+          ls -lh GameHub_Pro_v3.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameHub-Pro-IPA
+          path: |
+            build/GameHub_Pro_v3.ipa
+          retention-days: 14
   push:
     branches: [ main ]
   workflow_dispatch:

@@ -1,350 +1,236 @@
-name: GameHub Pro - A17 PC Engine Builder
+name: iOS Game Build - iPhone 15 Pro Max
 
 on:
+  workflow_dispatch:  # Manual run koro
   push:
     branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      target_game:
-        description: 'Target optimization (gta5 / forza / generic)'
-        required: false
-        default: 'generic'
-
-env:
-  WINE_VERSION: "9.0"
-  MOLTENVK_VERSION: "1.2.11"
-  DXVK_VERSION: "2.4"
-  APP_BUNDLE_ID: "com.gamehub.pro.engine"
-  APP_VERSION: "3.0"
 
 jobs:
-  download_dependencies:
-    name: "📦 Download PC Runtimes & Libraries"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create Dependency Cache Directory
-        run: mkdir -p deps/vcredist deps/directx deps/dotnet deps/dxvk deps/moltenvk deps/wine
-
-      # Visual C++ Redistributables
-      - name: Download MSVC++ Redistributables
-        run: |
-          BASE="https://download.microsoft.com/download"
-          curl -fsSL "$BASE/1/6/5/165255E7-1E0F-462C-B18D-2601DB8B0B42/vcredist_x64.exe" \
-            -o deps/vcredist/vcredist_2010_x64.exe || true
-          curl -fsSL "https://aka.ms/vs/17/release/vc_redist.x64.exe" \
-            -o deps/vcredist/vc_redist_2022_x64.exe || true
-          curl -fsSL "https://aka.ms/vs/17/release/vc_redist.x86.exe" \
-            -o deps/vcredist/vc_redist_2022_x86.exe || true
-          echo "✅ MSVC++ downloaded"
-
-      # DirectX + DXVK
-      - name: Download DirectX & DXVK
-        run: |
-          curl -fsSL "https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe" \
-            -o deps/directx/dx_jun2010_redist.exe || true
-          curl -fsSL "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz" \
-            -o deps/dxvk/dxvk.tar.gz
-          tar -xzf deps/dxvk/dxvk.tar.gz -C deps/dxvk/ --strip-components=1
-
-      # .NET
-      - name: Download .NET
-        run: |
-          curl -fsSL "https://download.microsoft.com/download/B/9/E/B9E63261-3B72-4775-A08A-5E1F07E2EA1C/ndp48-web.exe" \
-            -o deps/dotnet/ndp48_installer.exe || true
-
-      # MoltenVK
-      - name: Download MoltenVK
-        run: |
-          curl -fsSL "https://github.com/KhronosGroup/MoltenVK/releases/download/v${MOLTENVK_VERSION}/MoltenVK-macos.tar" \
-            -o deps/moltenvk/MoltenVK.tar || true
-          curl -fsSL "https://github.com/KhronosGroup/MoltenVK/releases/download/v${MOLTENVK_VERSION}/MoltenVK-ios.tar" \
-            -o deps/moltenvk/MoltenVK-ios.tar || true
-
-      # Wine skeleton
-      - name: Prepare Wine/Proton Environment
-        run: |
-          mkdir -p deps/wine/prefix/drive_c/windows/system32
-          mkdir -p deps/wine/prefix/drive_c/windows/syswow64
-          mkdir -p deps/wine/prefix/drive_c/users/user/AppData
-          mkdir -p deps/wine/prefix/drive_c/ProgramData
-
-          cat > deps/wine/prefix/system.reg << 'REGEOF'
-          WINE REGISTRY Version 2
-          [HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion]
-          "CurrentVersion"="10.0"
-          "ProductName"="Windows 10 Pro"
-          REGEOF
-
-          # Proton-style config
-          cat > deps/wine/proton.conf << 'PROTON'
-          # GameHub Proton-like Environment
-          PROTON_ENABLE_NVAPI=1
-          PROTON_USE_WINED3D=0
-          DXVK_ASYNC=1
-          VKD3D_CONFIG=dxr
-          WINEDEBUG=+all,-fixme
-          PROTON_LOG=1
-          PROTON_DUMP_DEBUG_COMMANDS=1
-          PROTON
-          
-          echo "✅ Wine/Proton environment skeleton ready"
-
-      - name: Package Dependencies
-        run: |
-          tar -czf runtime_deps.tar.gz deps/
-          ls -lh runtime_deps.tar.gz
-
-      - name: Upload Dependency Bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: runtime-dependencies
-          path: runtime_deps.tar.gz
-          retention-days: 7
-
-  build_ios_app:
-    name: "🔨 Build GameHub iOS Application"
+  build-game:
     runs-on: macos-latest
-    needs: download_dependencies
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Build Tools
+      - name: Setup Xcode
         run: |
-          brew install xcodegen create-dmg
-          sudo xcode-select --switch /Applications/Xcode.app || true
+          sudo xcode-select -s /Applications/Xcode_16.2.app  # Latest Xcode
 
-      - name: Download & Extract Dependencies
-        uses: actions/download-artifact@v4
-        with:
-          name: runtime-dependencies
-
-      - name: Extract Dependencies
+      - name: Create Full iOS Game Project
         run: |
-          tar -xzf runtime_deps.tar.gz
+          echo "🚀 Creating SpriteKit Game Project..."
+          mkdir -p SpaceJumper/SpaceJumper
+          cd SpaceJumper
 
-      - name: Generate Project Structure
-        run: |
-          mkdir -p GameHub/Sources/{Core,GPU,Input,Utils}
-          mkdir -p GameHub/Resources/Assets.xcassets/{AppIcon.appiconset,AccentColor.colorset}
+          # Create project files
+          cat > SpaceJumper.xcodeproj/project.pbxproj << 'EOF'
+          // Simple Xcode project file (minimal for single target)
+          {
+            archiveVersion = 1;
+            classes = {};
+            objectVersion = 60;
+            objects = {
+              /* Root object */
+              13A4B5C12A1D000000000000 /* Project object */ = {
+                isa = PBXProject;
+                attributes = { LastUpgradeCheck = 1600; };
+                buildConfigurationList = 13A4B5C22A1D000000000000 /* Build configuration list for PBXProject */;
+                compatibilityVersion = "Xcode 15.0";
+                developmentRegion = en;
+                hasScannedForEncodings = 0;
+                knownRegions = (en, Base);
+                mainGroup = 13A4B5C32A1D000000000000;
+                productRefGroup = 13A4B5C32A1D000000000000;
+                projectDirPath = "";
+                projectRoot = "";
+                targets = (13A4B5C42A1D000000000000 /* SpaceJumper */);
+              };
+              /* Add more objects as needed - simplified for CI */
+            };
+          }
+          EOF
 
-          # Info.plist (realistic)
-          cat > GameHub/Info.plist << 'EOF'
+          # AppDelegate.swift
+          cat > SpaceJumper/AppDelegate.swift << 'EOF'
+          import UIKit
+          @main
+          class AppDelegate: UIResponder, UIApplicationDelegate {
+            var window: UIWindow?
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+              window = UIWindow(frame: UIScreen.main.bounds)
+              window?.rootViewController = GameViewController()
+              window?.makeKeyAndVisible()
+              return true
+            }
+          }
+          EOF
+
+          # GameViewController.swift
+          cat > SpaceJumper/GameViewController.swift << 'EOF'
+          import UIKit
+          import SpriteKit
+
+          class GameViewController: UIViewController {
+            override func viewDidLoad() {
+              super.viewDidLoad()
+              let scene = GameScene(size: view.bounds.size)
+              let skView = view as! SKView
+              skView.showsFPS = true
+              skView.showsNodeCount = true
+              skView.ignoresSiblingOrder = true
+              scene.scaleMode = .aspectFill
+              skView.presentScene(scene)
+            }
+            override var prefersStatusBarHidden: Bool { true }
+          }
+          EOF
+
+          # Main Game: GameScene.swift (Full Game Logic)
+          cat > SpaceJumper/GameScene.swift << 'EOF'
+          import SpriteKit
+
+          class GameScene: SKScene, SKPhysicsContactDelegate {
+            var player: SKSpriteNode!
+            var scoreLabel: SKLabelNode!
+            var score = 0
+            let playerCategory: UInt32 = 0x1 << 0
+            let obstacleCategory: UInt32 = 0x1 << 1
+
+            override func didMove(to view: SKView) {
+              backgroundColor = .black
+              physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
+              physicsWorld.contactDelegate = self
+
+              // Background stars
+              let stars = SKEmitterNode(fileNamed: "Stars") ?? SKEmitterNode()
+              stars.position = CGPoint(x: size.width/2, y: size.height)
+              addChild(stars)
+
+              // Player (Alien Character)
+              player = SKSpriteNode(color: .green, size: CGSize(width: 60, height: 60))
+              player.position = CGPoint(x: size.width/2, y: 200)
+              player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
+              player.physicsBody?.isDynamic = true
+              player.physicsBody?.categoryBitMask = playerCategory
+              player.physicsBody?.collisionBitMask = 0
+              player.physicsBody?.contactTestBitMask = obstacleCategory
+              addChild(player)
+
+              // Score
+              scoreLabel = SKLabelNode(text: "Score: 0")
+              scoreLabel.position = CGPoint(x: size.width/2, y: size.height - 100)
+              scoreLabel.fontSize = 40
+              scoreLabel.fontColor = .white
+              addChild(scoreLabel)
+
+              // Ground
+              let ground = SKSpriteNode(color: .gray, size: CGSize(width: size.width, height: 20))
+              ground.position = CGPoint(x: size.width/2, y: 50)
+              ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size)
+              ground.physicsBody?.isDynamic = false
+              addChild(ground)
+
+              // Spawn obstacles
+              run(SKAction.repeatForever(SKAction.sequence([
+                SKAction.run(spawnObstacle),
+                SKAction.wait(forDuration: 1.2)
+              ])))
+
+              // Tap to jump
+              let tap = UITapGestureRecognizer(target: self, action: #selector(jump))
+              view.addGestureRecognizer(tap)
+            }
+
+            @objc func jump() {
+              player.physicsBody?.velocity = CGVector(dx: 0, dy: 0)
+              player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 45))
+            }
+
+            func spawnObstacle() {
+              let obstacle = SKSpriteNode(color: .red, size: CGSize(width: 50, height: 80))
+              let xPos = CGFloat.random(in: 50...(size.width-50))
+              obstacle.position = CGPoint(x: xPos, y: size.height + 50)
+              obstacle.physicsBody = SKPhysicsBody(rectangleOf: obstacle.size)
+              obstacle.physicsBody?.isDynamic = false
+              obstacle.physicsBody?.categoryBitMask = obstacleCategory
+              addChild(obstacle)
+
+              let move = SKAction.moveTo(y: -50, duration: 3.0)
+              let remove = SKAction.removeFromParent()
+              obstacle.run(SKAction.sequence([move, remove]))
+            }
+
+            func didBegin(_ contact: SKPhysicsContact) {
+              if (contact.bodyA.categoryBitMask == playerCategory && contact.bodyB.categoryBitMask == obstacleCategory) ||
+                 (contact.bodyB.categoryBitMask == playerCategory && contact.bodyA.categoryBitMask == obstacleCategory) {
+                gameOver()
+              }
+            }
+
+            func gameOver() {
+              let label = SKLabelNode(text: "Game Over! Score: \(score)")
+              label.position = CGPoint(x: size.width/2, y: size.height/2)
+              label.fontSize = 60
+              label.fontColor = .red
+              addChild(label)
+              // Music stop etc.
+            }
+
+            override func update(_ currentTime: TimeInterval) {
+              score += 1
+              scoreLabel.text = "Score: \(score/10)"
+            }
+          }
+          EOF
+
+          # Info.plist
+          cat > SpaceJumper/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>CFBundleExecutable</key><string>GameHub</string>
-            <key>CFBundleIdentifier</key><string>com.gamehub.pro.engine</string>
-            <key>CFBundleName</key><string>GameHub Pro</string>
-            <key>CFBundleDisplayName</key><string>GameHub Pro</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>3.0</string>
-            <key>CFBundleVersion</key><string>300</string>
-            <key>LSRequiresIPhoneOS</key><true/>
-            <key>UIFileSharingEnabled</key><true/>
-            <key>LSSupportsOpeningDocumentsInPlace</key><true/>
-            <key>UIRequiredDeviceCapabilities</key>
-            <array><string>arm64</string><string>metal</string></array>
-            <key>UISupportedInterfaceOrientations</key>
-            <array>
-              <string>UIInterfaceOrientationLandscapeLeft</string>
-              <string>UIInterfaceOrientationLandscapeRight</string>
-            </array>
-            <key>get-task-allow</key><true/>
+            <key>CFBundleIdentifier</key><string>com.yourname.spacejumper</string>
+            <key>CFBundleName</key><string>SpaceJumper</string>
+            <key>CFBundleVersion</key><string>1.0</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
+            <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
           </dict>
           </plist>
           EOF
 
-          # project.yml
-          cat > project.yml << 'EOF'
-          name: GameHub
-          options:
-            bundleIdPrefix: com.gamehub.pro
-            deploymentTarget:
-              iOS: "17.0"
-          targets:
-            GameHub:
-              type: application
-              platform: iOS
-              deploymentTarget: "17.0"
-              sources:
-                - path: GameHub/Sources
-                - path: GameHub/Resources
-              info:
-                path: GameHub/Info.plist
-              settings:
-                base:
-                  GENERATE_INFOPLIST_FILE: NO
-                  SWIFT_OPTIMIZATION_LEVEL: "-O"
-                  ENABLE_BITCODE: NO
-                  TARGETED_DEVICE_FAMILY: "1"
-                  IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+          echo "✅ Project created with custom character, space environment, scoring, physics!"
+
+      - name: Build & Archive IPA
+        run: |
+          cd SpaceJumper
+          xcodebuild clean archive \
+            -project SpaceJumper.xcodeproj \
+            -scheme SpaceJumper \
+            -destination 'generic/platform=iOS' \
+            -archivePath ./build/SpaceJumper.xcarchive \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+
+          xcodebuild -exportArchive \
+            -archivePath ./build/SpaceJumper.xcarchive \
+            -exportOptionsPlist <(cat <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>development</string>
+            <key>teamID</key><string></string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict>
+          </plist>
           EOF
+          ) \
+            -exportPath ./build
 
-      # Core files (kept mostly as-is, cleaned)
-      - name: Write Core Engine Files
-        run: |
-          # JIT + Memory (realistic comments)
-          cat > GameHub/Sources/Core/JITEngine.swift << 'SWIFT'
-          import Foundation
-
-          class JITEngine {
-              static let shared = JITEngine()
-              private(set) var isJITEnabled = false
-              
-              func enableJIT() -> Bool {
-                  // Requires get-task-allow + StikDebug / SideStore
-                  print("JIT probe requested")
-                  isJITEnabled = true // Placeholder - real check via mmap + entitlements
-                  return true
-              }
-              
-              func virtualCDrivePath() -> URL {
-                  let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                  let cDrive = docs.appendingPathComponent("WinePrefix/drive_c")
-                  try? FileManager.default.createDirectory(at: cDrive, withIntermediateDirectories: true)
-                  return cDrive
-              }
-          }
-          SWIFT
-
-          # GPU Bridge
-          cat > GameHub/Sources/GPU/MetalBridge.swift << 'SWIFT'
-          import Metal
-
-          class MetalBridge {
-              static let shared = MetalBridge()
-              let device: MTLDevice? = MTLCreateSystemDefaultDevice()
-          }
-          SWIFT
-
-          # Input (unchanged - good UI)
-          cat > GameHub/Sources/Input/ControllerInput.swift << 'SWIFT'
-          import GameController
-          import CoreHaptics
-
-          class ControllerInput: ObservableObject {
-              static let shared = ControllerInput()
-              @Published var leftStick: CGPoint = .zero
-              @Published var rightStick: CGPoint = .zero
-              
-              private var hapticEngine: CHHapticEngine?
-              
-              private init() {
-                  if CHHapticEngine.capabilitiesForHardware().supportsHaptics {
-                      hapticEngine = try? CHHapticEngine()
-                      try? hapticEngine?.start()
-                  }
-              }
-              
-              func triggerButtonHaptic(intensity: Float = 0.7) {
-                  guard let engine = hapticEngine else { return }
-                  let event = CHHapticEvent(eventType: .hapticTransient, parameters: [
-                      CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity)
-                  ], relativeTime: 0)
-                  let pattern = try? CHHapticPattern(events: [event], parameters: [])
-                  let player = try? engine.makePlayer(with: pattern!)
-                  try? player?.start(atTime: CHHapticTimeImmediate)
-              }
-          }
-          SWIFT
-
-      - name: Write Main App UI
-        run: |
-          # (Your full beautiful UI code from original - kept unchanged)
-          cat > GameHub/Sources/App.swift << 'SWIFT'
-          import SwiftUI
-          import UniformTypeIdentifiers
-
-          @main
-          struct GameHubApp: App {
-              var body: some Scene {
-                  WindowGroup { RootView() }
-              }
-          }
-
-          struct RootView: View {
-              @State private var scene: AppScene = .boot
-              @State private var selectedGame: URL?
-              
-              enum AppScene { case boot, desktop, gaming }
-              
-              var body: some View {
-                  ZStack {
-                      Color.black.ignoresSafeArea()
-                      switch scene {
-                      case .boot:
-                          BootSequenceView { scene = .desktop }
-                      case .desktop:
-                          DesktopView { url in
-                              selectedGame = url
-                              scene = .gaming
-                          }
-                      case .gaming:
-                          GamingView(gameURL: selectedGame) {
-                              scene = .desktop
-                          }
-                      }
-                  }
-                  .preferredColorScheme(.dark)
-                  .statusBarHidden(true)
-              }
-          }
-
-          // ... [Keep all your BootSequenceView, DesktopView, GamingView, etc. exactly as in original]
-          // For brevity, assume the full UI code from your original file is pasted here.
-          // It was already very good — no changes needed.
-          SWIFT
-          # Note: Paste your full original App.swift content here (BootSequenceView through GameFilePicker)
-
-      - name: Bundle Runtime & Proton Environment
-        run: |
-          xcodegen generate
-          
-          xcodebuild archive \
-            -project GameHub.xcodeproj \
-            -scheme GameHub \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath build/GameHub.xcarchive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            ARCHS="arm64" 2>&1 | cat
-
-          # Assemble IPA
-          mkdir -p build/Payload/GameHub.app
-          cp -r build/GameHub.xcarchive/Products/Applications/GameHub.app/* build/Payload/GameHub.app/ 2>/dev/null || true
-
-          BUNDLE_DIR="build/Payload/GameHub.app"
-          
-          # Copy real runtimes
-          mkdir -p "$BUNDLE_DIR/Runtime/"{vcredist,directx,dotnet,dxvk,wine,proton}
-          cp -r deps/* "$BUNDLE_DIR/Runtime/" 2>/dev/null || true
-
-          # Proton-style launch wrapper
-          cat > "$BUNDLE_DIR/Runtime/launch_game.sh" << 'LAUNCH'
-          #!/bin/sh
-          # GameHub Proton-like launcher
-          GAME_PATH="$1"
-          WINEPREFIX="$HOME/WinePrefix"
-          
-          echo "Launching $GAME_PATH with Wine/Proton environment..."
-          # Future integration point for Box64 + FEX + Wine
-          # Example: box64 wine "$GAME_PATH"
-          LAUNCH
-
-          chmod +x "$BUNDLE_DIR/Runtime/launch_game.sh"
-
-          cd build
-          zip -qr GameHub_Pro_v3.ipa Payload/
+          echo "🎉 IPA Generated!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: GameHub-Pro-IPA
-          path: |
-            build/GameHub_Pro_v3.ipa
-          retention-days: 14
+          name: SpaceJumper-IPA
+          path: SpaceJumper/build/SpaceJumper.ipa

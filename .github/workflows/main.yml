@@ -16,7 +16,9 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
       - name: Install Tools
-        run: brew install xcodegen xcpretty
+        run: |
+          brew install xcodegen
+          gem install xcpretty
 
       - name: Create SpriteKit Game Project
         run: |
@@ -27,7 +29,6 @@ jobs:
 
           cd SpaceJumper
 
-          # Improved project.yml
           cat > project.yml << 'EOF'
           name: SpaceJumper
           options:
@@ -54,46 +55,27 @@ jobs:
                   CODE_SIGNING_REQUIRED: NO
                   ENABLE_BITCODE: NO
                   SDKROOT: iphoneos
-                  SUPPORTED_PLATFORMS: iphonesimulator iphoneos
-              entitlements:
-                com.apple.developer.team-identifier: ""
           EOF
 
-          # Info.plist (Full)
           cat > Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>CFBundleIdentifier</key>
-            <string>com.yourname.spacejumper</string>
-            <key>CFBundleName</key>
-            <string>SpaceJumper</string>
-            <key>CFBundleExecutable</key>
-            <string>$(EXECUTABLE_NAME)</string>
-            <key>CFBundleVersion</key>
-            <string>1.0</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>LSRequiresIPhoneOS</key>
-            <true/>
-            <key>UIRequiredDeviceCapabilities</key>
-            <array>
-              <string>arm64</string>
-            </array>
-            <key>UISupportedInterfaceOrientations</key>
-            <array>
-              <string>UIInterfaceOrientationPortrait</string>
-            </array>
-            <key>UILaunchScreen</key>
-            <dict/>
+            <key>CFBundleIdentifier</key><string>com.yourname.spacejumper</string>
+            <key>CFBundleName</key><string>SpaceJumper</string>
+            <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+            <key>CFBundleVersion</key><string>1.0</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>LSRequiresIPhoneOS</key><true/>
+            <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
+            <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+            <key>UILaunchScreen</key><dict/>
           </dict>
           </plist>
           EOF
 
-          # Swift Files (same as before)
           cat > Sources/SpaceJumper/AppDelegate.swift << 'EOF'
           import UIKit
           @main
@@ -223,23 +205,20 @@ jobs:
           EOF
 
           xcodegen generate
-          echo "✅ Project generated successfully!"
+          echo "✅ Project generated!"
 
-      - name: Build & Archive
+      - name: Build & Export IPA
         run: |
           cd SpaceJumper
           mkdir -p build
 
-          echo "🔨 Starting Archive..."
           xcodebuild clean archive \
             -project SpaceJumper.xcodeproj \
             -scheme SpaceJumper \
             -destination 'generic/platform=iOS' \
             -archivePath build/SpaceJumper.xcarchive \
-            CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual \
-            | xcpretty
+            CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual 2>&1 | xcpretty
 
-          echo "📦 Exporting IPA..."
           xcodebuild -exportArchive \
             -archivePath build/SpaceJumper.xcarchive \
             -exportOptionsPlist <(cat <<'EOP'
@@ -253,14 +232,13 @@ jobs:
           </plist>
           EOP
           ) \
-            -exportPath build | xcpretty
+            -exportPath build 2>&1 | xcpretty
 
           ls -la build/
-          echo "🎉 Process completed!"
+          echo "🎉 Build process finished!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: SpaceJumper-IPA
           path: SpaceJumper/build/SpaceJumper.ipa
-          if-no-files-found: warn

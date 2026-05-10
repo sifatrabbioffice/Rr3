@@ -7,8 +7,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
@@ -24,7 +23,6 @@ jobs:
           mkdir -p SpaceJumper/Sources/SpaceJumper
           cd SpaceJumper
 
-          # project.yml
           cat > project.yml << 'EOF'
           name: SpaceJumper
           options:
@@ -50,7 +48,6 @@ jobs:
                   ENABLE_BITCODE: NO
           EOF
 
-          # Info.plist
           cat > Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,18 +55,21 @@ jobs:
           <dict>
             <key>CFBundleIdentifier</key><string>com.yourname.spacejumper</string>
             <key>CFBundleName</key><string>SpaceJumper</string>
-            <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
             <key>CFBundleVersion</key><string>1.0</string>
             <key>CFBundleShortVersionString</key><string>1.0</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>LSRequiresIPhoneOS</key><true/>
             <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
-            <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+            <key>UISupportedInterfaceOrientations</key><array>
+              <string>UIInterfaceOrientationPortrait</string>
+              <string>UIInterfaceOrientationLandscapeLeft</string>
+              <string>UIInterfaceOrientationLandscapeRight</string>
+            </array>
+            <key>UILaunchScreen</key><dict/>
           </dict>
           </plist>
           EOF
 
-          # Swift Files
           cat > Sources/SpaceJumper/AppDelegate.swift << 'EOF'
           import UIKit
           @main
@@ -122,7 +122,7 @@ jobs:
               stars.particleTexture = SKTexture(imageNamed: "spark")
               stars.particleBirthRate = 120
               stars.particleLifetime = 6
-              stars.particleSpeed = 40
+              stars.particleSpeed = 60
               stars.particleColor = .white
               stars.position = CGPoint(x: size.width/2, y: size.height)
               addChild(stars)
@@ -143,7 +143,7 @@ jobs:
 
               // Ground
               let ground = SKSpriteNode(color: .darkGray, size: CGSize(width: size.width*2, height: 60))
-              ground.position = CGPoint(x: size.width/2, y: 80)
+              ground.position = CGPoint(x: size.width/2, y: 90)
               ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size)
               ground.physicsBody?.isDynamic = false
               addChild(ground)
@@ -160,7 +160,7 @@ jobs:
             @objc func jump() {
               if !isGameOver {
                 player.physicsBody?.velocity.dy = 0
-                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 55))
+                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 52))
               }
             }
 
@@ -198,7 +198,7 @@ jobs:
           xcodegen generate
           echo "✅ Project Created!"
 
-      - name: Build & Export IPA
+      - name: Build IPA
         run: |
           cd SpaceJumper
           mkdir -p build
@@ -210,7 +210,7 @@ jobs:
             -archivePath build/SpaceJumper.xcarchive \
             CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual 2>&1 | xcpretty
 
-          cat > build/exportOptions.plist << 'EOF'
+          cat > build/exportOptions.plist << 'EOP'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -219,15 +219,15 @@ jobs:
             <key>signingStyle</key><string>automatic</string>
           </dict>
           </plist>
-          EOF
+          EOP
 
           xcodebuild -exportArchive \
             -archivePath build/SpaceJumper.xcarchive \
             -exportOptionsPlist build/exportOptions.plist \
             -exportPath build 2>&1 | xcpretty
 
-          ls -R build/
-          echo "🎉 IPA Build Completed!"
+          ls -la build/
+          echo "🎉 IPA Ready!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

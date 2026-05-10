@@ -1,12 +1,10 @@
-name: iOS Game Build - SpaceJumper
+name: Build SpaceJumper IPA
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
-  build-game:
+  build:
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -20,21 +18,19 @@ jobs:
           brew install xcodegen
           gem install xcpretty
 
-      - name: Create SpriteKit Game
+      - name: Create Game Project
         run: |
-          echo "🚀 Creating SpaceJumper Game..."
           rm -rf SpaceJumper
           mkdir -p SpaceJumper/Sources/SpaceJumper
           cd SpaceJumper
 
+          # project.yml
           cat > project.yml << 'EOF'
           name: SpaceJumper
           options:
             bundleIdPrefix: com.yourname
             deploymentTarget:
               iOS: "17.0"
-            createIntermediateGroups: true
-
           targets:
             SpaceJumper:
               type: application
@@ -52,9 +48,9 @@ jobs:
                   CODE_SIGN_IDENTITY: ""
                   CODE_SIGNING_REQUIRED: NO
                   ENABLE_BITCODE: NO
-                  SDKROOT: iphoneos
           EOF
 
+          # Info.plist
           cat > Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -69,11 +65,11 @@ jobs:
             <key>LSRequiresIPhoneOS</key><true/>
             <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
             <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
-            <key>UILaunchScreen</key><dict/>
           </dict>
           </plist>
           EOF
 
+          # Swift Files
           cat > Sources/SpaceJumper/AppDelegate.swift << 'EOF'
           import UIKit
           @main
@@ -116,40 +112,38 @@ jobs:
             var score = 0
             var isGameOver = false
 
-            let playerCategory: UInt32 = 0x1 << 0
-            let obstacleCategory: UInt32 = 0x1 << 1
-
             override func didMove(to view: SKView) {
               backgroundColor = .black
               physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
               physicsWorld.contactDelegate = self
 
+              // Stars
               let stars = SKEmitterNode()
               stars.particleTexture = SKTexture(imageNamed: "spark")
-              stars.particleBirthRate = 100
-              stars.particleLifetime = 5
-              stars.particleSpeed = 50
+              stars.particleBirthRate = 120
+              stars.particleLifetime = 6
+              stars.particleSpeed = 40
               stars.particleColor = .white
               stars.position = CGPoint(x: size.width/2, y: size.height)
               addChild(stars)
 
-              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 70, height: 70))
+              // Player
+              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 75, height: 75))
               player.position = CGPoint(x: size.width/2, y: 250)
               player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
               player.physicsBody?.isDynamic = true
-              player.physicsBody?.categoryBitMask = playerCategory
-              player.physicsBody?.contactTestBitMask = obstacleCategory
-              player.physicsBody?.collisionBitMask = 0
               addChild(player)
 
+              // Score
               scoreLabel = SKLabelNode(text: "Score: 0")
               scoreLabel.position = CGPoint(x: size.width/2, y: size.height - 80)
               scoreLabel.fontSize = 50
               scoreLabel.fontColor = .white
               addChild(scoreLabel)
 
+              // Ground
               let ground = SKSpriteNode(color: .darkGray, size: CGSize(width: size.width*2, height: 60))
-              ground.position = CGPoint(x: size.width/2, y: 90)
+              ground.position = CGPoint(x: size.width/2, y: 80)
               ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size)
               ground.physicsBody?.isDynamic = false
               addChild(ground)
@@ -166,17 +160,16 @@ jobs:
             @objc func jump() {
               if !isGameOver {
                 player.physicsBody?.velocity.dy = 0
-                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 50))
+                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 55))
               }
             }
 
             func spawnObstacle() {
               if isGameOver { return }
-              let obs = SKSpriteNode(color: .red, size: CGSize(width: 55, height: 100))
+              let obs = SKSpriteNode(color: .red, size: CGSize(width: 60, height: 110))
               obs.position = CGPoint(x: CGFloat.random(in: 50...(size.width-50)), y: size.height + 100)
               obs.physicsBody = SKPhysicsBody(rectangleOf: obs.size)
               obs.physicsBody?.isDynamic = false
-              obs.physicsBody?.categoryBitMask = obstacleCategory
               addChild(obs)
               obs.run(SKAction.sequence([SKAction.moveTo(y: -100, duration: 3.0), SKAction.removeFromParent()]))
             }
@@ -203,14 +196,13 @@ jobs:
           EOF
 
           xcodegen generate
-          echo "✅ Project generated!"
+          echo "✅ Project Created!"
 
       - name: Build & Export IPA
         run: |
           cd SpaceJumper
           mkdir -p build
 
-          echo "🔨 Archiving..."
           xcodebuild clean archive \
             -project SpaceJumper.xcodeproj \
             -scheme SpaceJumper \
@@ -218,8 +210,7 @@ jobs:
             -archivePath build/SpaceJumper.xcarchive \
             CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual 2>&1 | xcpretty
 
-          echo "📤 Creating exportOptions.plist..."
-          cat > build/exportOptions.plist << 'EOP'
+          cat > build/exportOptions.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -228,19 +219,18 @@ jobs:
             <key>signingStyle</key><string>automatic</string>
           </dict>
           </plist>
-          EOP
+          EOF
 
-          echo "📦 Exporting IPA..."
           xcodebuild -exportArchive \
             -archivePath build/SpaceJumper.xcarchive \
             -exportOptionsPlist build/exportOptions.plist \
             -exportPath build 2>&1 | xcpretty
 
-          ls -la build/
-          echo "🎉 Done!"
+          ls -R build/
+          echo "🎉 IPA Build Completed!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: SpaceJumper-IPA
+          name: SpaceJumper-iPhone15ProMax
           path: SpaceJumper/build/SpaceJumper.ipa

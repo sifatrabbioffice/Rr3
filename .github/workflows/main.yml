@@ -20,13 +20,11 @@ jobs:
           brew install xcodegen
           gem install xcpretty
 
-      - name: Create SpriteKit Game Project
+      - name: Create SpriteKit Game
         run: |
           echo "🚀 Creating SpaceJumper Game..."
-
           rm -rf SpaceJumper
           mkdir -p SpaceJumper/Sources/SpaceJumper
-
           cd SpaceJumper
 
           cat > project.yml << 'EOF'
@@ -212,6 +210,7 @@ jobs:
           cd SpaceJumper
           mkdir -p build
 
+          echo "🔨 Archiving..."
           xcodebuild clean archive \
             -project SpaceJumper.xcodeproj \
             -scheme SpaceJumper \
@@ -219,9 +218,8 @@ jobs:
             -archivePath build/SpaceJumper.xcarchive \
             CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual 2>&1 | xcpretty
 
-          xcodebuild -exportArchive \
-            -archivePath build/SpaceJumper.xcarchive \
-            -exportOptionsPlist <(cat <<'EOP'
+          echo "📤 Creating exportOptions.plist..."
+          cat > build/exportOptions.plist << 'EOP'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -231,11 +229,15 @@ jobs:
           </dict>
           </plist>
           EOP
-          ) \
+
+          echo "📦 Exporting IPA..."
+          xcodebuild -exportArchive \
+            -archivePath build/SpaceJumper.xcarchive \
+            -exportOptionsPlist build/exportOptions.plist \
             -exportPath build 2>&1 | xcpretty
 
           ls -la build/
-          echo "🎉 Build process finished!"
+          echo "🎉 Done!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

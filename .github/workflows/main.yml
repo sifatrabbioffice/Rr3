@@ -15,19 +15,19 @@ jobs:
       - name: Setup Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install Tools
+        run: brew install xcodegen xcpretty
 
-      - name: Create Complete SpriteKit Game
+      - name: Create SpriteKit Game Project
         run: |
-          echo "🚀 Creating full Xcode project..."
+          echo "🚀 Creating SpaceJumper Game..."
 
           rm -rf SpaceJumper
           mkdir -p SpaceJumper/Sources/SpaceJumper
 
           cd SpaceJumper
 
-          # === Project.yml with Info.plist ===
+          # Improved project.yml
           cat > project.yml << 'EOF'
           name: SpaceJumper
           options:
@@ -46,15 +46,20 @@ jobs:
                 - path: Info.plist
               settings:
                 base:
+                  PRODUCT_NAME: SpaceJumper
+                  PRODUCT_BUNDLE_IDENTIFIER: com.yourname.spacejumper
+                  INFOPLIST_FILE: Info.plist
                   CODE_SIGN_STYLE: Manual
                   CODE_SIGN_IDENTITY: ""
                   CODE_SIGNING_REQUIRED: NO
-                  PRODUCT_BUNDLE_IDENTIFIER: com.yourname.spacejumper
-                  INFOPLIST_FILE: Info.plist
                   ENABLE_BITCODE: NO
+                  SDKROOT: iphoneos
+                  SUPPORTED_PLATFORMS: iphonesimulator iphoneos
+              entitlements:
+                com.apple.developer.team-identifier: ""
           EOF
 
-          # Info.plist
+          # Info.plist (Full)
           cat > Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,6 +77,8 @@ jobs:
             <string>1.0</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
             <key>UIRequiredDeviceCapabilities</key>
             <array>
               <string>arm64</string>
@@ -80,13 +87,13 @@ jobs:
             <array>
               <string>UIInterfaceOrientationPortrait</string>
             </array>
-            <key>LSRequiresIPhoneOS</key>
-            <true/>
+            <key>UILaunchScreen</key>
+            <dict/>
           </dict>
           </plist>
           EOF
 
-          # AppDelegate.swift
+          # Swift Files (same as before)
           cat > Sources/SpaceJumper/AppDelegate.swift << 'EOF'
           import UIKit
           @main
@@ -101,7 +108,6 @@ jobs:
           }
           EOF
 
-          # GameViewController.swift
           cat > Sources/SpaceJumper/GameViewController.swift << 'EOF'
           import UIKit
           import SpriteKit
@@ -121,7 +127,6 @@ jobs:
           }
           EOF
 
-          # GameScene.swift (Improved Endless Jumper)
           cat > Sources/SpaceJumper/GameScene.swift << 'EOF'
           import SpriteKit
 
@@ -139,18 +144,16 @@ jobs:
               physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
               physicsWorld.contactDelegate = self
 
-              // Stars
               let stars = SKEmitterNode()
               stars.particleTexture = SKTexture(imageNamed: "spark")
-              stars.particleBirthRate = 120
+              stars.particleBirthRate = 100
               stars.particleLifetime = 5
-              stars.particleSpeed = 60
+              stars.particleSpeed = 50
               stars.particleColor = .white
               stars.position = CGPoint(x: size.width/2, y: size.height)
               addChild(stars)
 
-              // Player (Alien)
-              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 75, height: 75))
+              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 70, height: 70))
               player.position = CGPoint(x: size.width/2, y: 250)
               player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
               player.physicsBody?.isDynamic = true
@@ -161,11 +164,10 @@ jobs:
 
               scoreLabel = SKLabelNode(text: "Score: 0")
               scoreLabel.position = CGPoint(x: size.width/2, y: size.height - 80)
-              scoreLabel.fontSize = 52
+              scoreLabel.fontSize = 50
               scoreLabel.fontColor = .white
               addChild(scoreLabel)
 
-              // Ground
               let ground = SKSpriteNode(color: .darkGray, size: CGSize(width: size.width*2, height: 60))
               ground.position = CGPoint(x: size.width/2, y: 90)
               ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size)
@@ -174,7 +176,7 @@ jobs:
 
               run(SKAction.repeatForever(SKAction.sequence([
                 SKAction.run(spawnObstacle),
-                SKAction.wait(forDuration: 0.95)
+                SKAction.wait(forDuration: 1.0)
               ])))
 
               let tap = UITapGestureRecognizer(target: self, action: #selector(jump))
@@ -184,37 +186,31 @@ jobs:
             @objc func jump() {
               if !isGameOver {
                 player.physicsBody?.velocity.dy = 0
-                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 52))
+                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 50))
               }
             }
 
             func spawnObstacle() {
               if isGameOver { return }
-              let obs = SKSpriteNode(color: .red, size: CGSize(width: 60, height: 110))
-              let x = CGFloat.random(in: 50...(size.width-50))
-              obs.position = CGPoint(x: x, y: size.height + 100)
+              let obs = SKSpriteNode(color: .red, size: CGSize(width: 55, height: 100))
+              obs.position = CGPoint(x: CGFloat.random(in: 50...(size.width-50)), y: size.height + 100)
               obs.physicsBody = SKPhysicsBody(rectangleOf: obs.size)
               obs.physicsBody?.isDynamic = false
               obs.physicsBody?.categoryBitMask = obstacleCategory
               addChild(obs)
-
               obs.run(SKAction.sequence([SKAction.moveTo(y: -100, duration: 3.0), SKAction.removeFromParent()]))
             }
 
             func didBegin(_ contact: SKPhysicsContact) {
               if !isGameOver {
                 isGameOver = true
-                gameOver()
+                let label = SKLabelNode(text: "GAME OVER\nScore: \(score/10)")
+                label.position = CGPoint(x: size.width/2, y: size.height/2)
+                label.fontSize = 70
+                label.fontColor = .red
+                label.numberOfLines = 0
+                addChild(label)
               }
-            }
-
-            func gameOver() {
-              let label = SKLabelNode(text: "GAME OVER\nScore: \(score/10)")
-              label.position = CGPoint(x: size.width/2, y: size.height/2)
-              label.fontSize = 75
-              label.fontColor = .red
-              label.numberOfLines = 0
-              addChild(label)
             }
 
             override func update(_ currentTime: TimeInterval) {
@@ -226,21 +222,24 @@ jobs:
           }
           EOF
 
-          echo "✅ Files created. Generating project..."
           xcodegen generate
-          echo "✅ Project generated!"
+          echo "✅ Project generated successfully!"
 
-      - name: Build & Export IPA
+      - name: Build & Archive
         run: |
           cd SpaceJumper
-          
+          mkdir -p build
+
+          echo "🔨 Starting Archive..."
           xcodebuild clean archive \
             -project SpaceJumper.xcodeproj \
             -scheme SpaceJumper \
             -destination 'generic/platform=iOS' \
             -archivePath build/SpaceJumper.xcarchive \
-            CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual | xcpretty
+            CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual \
+            | xcpretty
 
+          echo "📦 Exporting IPA..."
           xcodebuild -exportArchive \
             -archivePath build/SpaceJumper.xcarchive \
             -exportOptionsPlist <(cat <<'EOP'
@@ -257,10 +256,11 @@ jobs:
             -exportPath build | xcpretty
 
           ls -la build/
-          echo "🎉 Build process finished!"
+          echo "🎉 Process completed!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: SpaceJumper-IPA
           path: SpaceJumper/build/SpaceJumper.ipa
+          if-no-files-found: warn

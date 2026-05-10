@@ -20,20 +20,22 @@ jobs:
 
       - name: Create Complete SpriteKit Game
         run: |
-          echo "🚀 Creating full Xcode project with XcodeGen..."
+          echo "🚀 Creating full Xcode project..."
 
           rm -rf SpaceJumper
-          mkdir -p SpaceJumper
+          mkdir -p SpaceJumper/Sources/SpaceJumper
 
           cd SpaceJumper
 
-          # Project spec for XcodeGen
+          # === Project.yml with Info.plist ===
           cat > project.yml << 'EOF'
           name: SpaceJumper
           options:
             bundleIdPrefix: com.yourname
             deploymentTarget:
               iOS: "17.0"
+            createIntermediateGroups: true
+
           targets:
             SpaceJumper:
               type: application
@@ -41,16 +43,48 @@ jobs:
               deploymentTarget: "17.0"
               sources:
                 - path: Sources
+                - path: Info.plist
               settings:
                 base:
                   CODE_SIGN_STYLE: Manual
                   CODE_SIGN_IDENTITY: ""
                   CODE_SIGNING_REQUIRED: NO
                   PRODUCT_BUNDLE_IDENTIFIER: com.yourname.spacejumper
+                  INFOPLIST_FILE: Info.plist
+                  ENABLE_BITCODE: NO
           EOF
 
-          # Create source folder
-          mkdir -p Sources/SpaceJumper
+          # Info.plist
+          cat > Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.yourname.spacejumper</string>
+            <key>CFBundleName</key>
+            <string>SpaceJumper</string>
+            <key>CFBundleExecutable</key>
+            <string>$(EXECUTABLE_NAME)</string>
+            <key>CFBundleVersion</key>
+            <string>1.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>UIRequiredDeviceCapabilities</key>
+            <array>
+              <string>arm64</string>
+            </array>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+              <string>UIInterfaceOrientationPortrait</string>
+            </array>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
 
           # AppDelegate.swift
           cat > Sources/SpaceJumper/AppDelegate.swift << 'EOF'
@@ -87,7 +121,7 @@ jobs:
           }
           EOF
 
-          # Main Game (Improved)
+          # GameScene.swift (Improved Endless Jumper)
           cat > Sources/SpaceJumper/GameScene.swift << 'EOF'
           import SpriteKit
 
@@ -105,18 +139,18 @@ jobs:
               physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
               physicsWorld.contactDelegate = self
 
-              // Background stars
+              // Stars
               let stars = SKEmitterNode()
               stars.particleTexture = SKTexture(imageNamed: "spark")
-              stars.particleBirthRate = 100
-              stars.particleLifetime = 6
-              stars.particleSpeed = 40
+              stars.particleBirthRate = 120
+              stars.particleLifetime = 5
+              stars.particleSpeed = 60
               stars.particleColor = .white
-              stars.position = CGPoint(x: size.width/2, y: size.height + 50)
+              stars.position = CGPoint(x: size.width/2, y: size.height)
               addChild(stars)
 
-              // Player - Alien
-              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 70, height: 70))
+              // Player (Alien)
+              player = SKSpriteNode(color: .systemGreen, size: CGSize(width: 75, height: 75))
               player.position = CGPoint(x: size.width/2, y: 250)
               player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
               player.physicsBody?.isDynamic = true
@@ -125,23 +159,22 @@ jobs:
               player.physicsBody?.collisionBitMask = 0
               addChild(player)
 
-              // Score
               scoreLabel = SKLabelNode(text: "Score: 0")
               scoreLabel.position = CGPoint(x: size.width/2, y: size.height - 80)
-              scoreLabel.fontSize = 50
+              scoreLabel.fontSize = 52
               scoreLabel.fontColor = .white
               addChild(scoreLabel)
 
               // Ground
-              let ground = SKSpriteNode(color: .darkGray, size: CGSize(width: size.width*2, height: 50))
-              ground.position = CGPoint(x: size.width/2, y: 80)
+              let ground = SKSpriteNode(color: .darkGray, size: CGSize(width: size.width*2, height: 60))
+              ground.position = CGPoint(x: size.width/2, y: 90)
               ground.physicsBody = SKPhysicsBody(rectangleOf: ground.size)
               ground.physicsBody?.isDynamic = false
               addChild(ground)
 
               run(SKAction.repeatForever(SKAction.sequence([
                 SKAction.run(spawnObstacle),
-                SKAction.wait(forDuration: 1.0)
+                SKAction.wait(forDuration: 0.95)
               ])))
 
               let tap = UITapGestureRecognizer(target: self, action: #selector(jump))
@@ -151,24 +184,21 @@ jobs:
             @objc func jump() {
               if !isGameOver {
                 player.physicsBody?.velocity.dy = 0
-                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 50))
+                player.physicsBody?.applyImpulse(CGVector(dx: 0, dy: 52))
               }
             }
 
             func spawnObstacle() {
               if isGameOver { return }
-              let obstacle = SKSpriteNode(color: .red, size: CGSize(width: 55, height: 100))
+              let obs = SKSpriteNode(color: .red, size: CGSize(width: 60, height: 110))
               let x = CGFloat.random(in: 50...(size.width-50))
-              obstacle.position = CGPoint(x: x, y: size.height + 50)
-              obstacle.physicsBody = SKPhysicsBody(rectangleOf: obstacle.size)
-              obstacle.physicsBody?.isDynamic = false
-              obstacle.physicsBody?.categoryBitMask = obstacleCategory
-              addChild(obstacle)
+              obs.position = CGPoint(x: x, y: size.height + 100)
+              obs.physicsBody = SKPhysicsBody(rectangleOf: obs.size)
+              obs.physicsBody?.isDynamic = false
+              obs.physicsBody?.categoryBitMask = obstacleCategory
+              addChild(obs)
 
-              obstacle.run(SKAction.sequence([
-                SKAction.moveTo(y: -50, duration: 3.0),
-                SKAction.removeFromParent()
-              ]))
+              obs.run(SKAction.sequence([SKAction.moveTo(y: -100, duration: 3.0), SKAction.removeFromParent()]))
             }
 
             func didBegin(_ contact: SKPhysicsContact) {
@@ -181,7 +211,7 @@ jobs:
             func gameOver() {
               let label = SKLabelNode(text: "GAME OVER\nScore: \(score/10)")
               label.position = CGPoint(x: size.width/2, y: size.height/2)
-              label.fontSize = 70
+              label.fontSize = 75
               label.fontColor = .red
               label.numberOfLines = 0
               addChild(label)
@@ -196,11 +226,9 @@ jobs:
           }
           EOF
 
-          echo "✅ Project spec created. Generating Xcode project..."
-
+          echo "✅ Files created. Generating project..."
           xcodegen generate
-
-          echo "✅ Xcode project successfully generated!"
+          echo "✅ Project generated!"
 
       - name: Build & Export IPA
         run: |
@@ -228,7 +256,8 @@ jobs:
           ) \
             -exportPath build | xcpretty
 
-          echo "🎉 IPA Successfully Created!"
+          ls -la build/
+          echo "🎉 Build process finished!"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
